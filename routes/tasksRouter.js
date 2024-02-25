@@ -3,98 +3,90 @@ const cors = require("cors");
 const app = express();
 const router = express.Router();
 const knex = require("knex")(require("../knexfile"));
-const authorizer = require("./middlewares/authorize.middleware");
+const authorizer = require("../middlewares/authorize.middleware");
 app.use(cors());
+app.use(express.json());
 require("dotenv").config();
 
-// Get all tasks for the authenticated user
-router.get("/", authMiddleware, async (req, res) => {
+// Get all tasks for a user
+router.get("/", authorizer, async (req, res) => {
   try {
-    const tasks = await knex("tasks").where({ user_id: req.userObj.id });
+    const userId = req.userObj.id;
+    const tasks = await knex("tasks")
+      .where({ user_id: userId })
+      .select("id", "title", "description", "position");
     res.json(tasks);
   } catch (error) {
-    console.error("Error fetching tasks:", error);
-    res.status(500).send("Error fetching tasks");
+    res.status(500).send(`Error retrieving tasks: ${error}`);
   }
 });
 
-// Get a single task by id for the authenticated user
-router.get("/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const task = await knex("tasks")
-      .where({ id, user_id: req.userObj.id })
-      .first();
-    if (!task) {
-      return res.status(404).send("Task not found or not accessible");
-    }
-    res.json(task);
-  } catch (error) {
-    console.error("Error fetching task:", error);
-    res.status(500).send("Error fetching task");
-  }
-});
-
-// POST route to create a new task for the authenticated user
-router.post("/", authMiddleware, async (req, res) => {
+// Create a new task
+router.post("/", authorizer, async (req, res) => {
+  const userId = req.userObj.id;
   const { title, description } = req.body;
-  if (!title || !description) {
-    return res.status(400).json({ error: "All fields are required." });
-  }
 
   try {
-    const newTaskId = await knex("tasks").insert({
+    const [newTaskId] = await knex("tasks").insert({
+      user_id: userId,
       title,
       description,
-      user_id: req.userObj.id, // Use authenticated user's id
     });
-    const newTask = await knex("tasks").where({ id: newTaskId[0] }).first();
+
+    const newTask = await knex("tasks").where({ id: newTaskId }).first();
     res.status(201).json(newTask);
   } catch (error) {
-    console.error("Error creating new task:", error);
-    res.status(400).json({ error: "Failed to create a new task." });
+    res.status(400).send(`Error creating task: ${error}`);
   }
 });
 
-// PUT route to update an existing task for the authenticated user
-router.put("/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  const { title, description } = req.body;
-  try {
-    const updated = await knex("tasks")
-      .where({ id, user_id: req.userObj.id })
-      .update({ title, description });
+// Update a task
+router.put("/:id", authorizer, async (req, res) => {
+  const taskId = req.params.id;
+  const userId = req.userObj.id;
+  // Include position in the destructuring assignment if it's part of the request body.
+  const { title, description, position } = req.body;
 
-    if (!updated) {
-      return res
-        .status(404)
-        .json({ error: "Task not found or not accessible." });
+  try {
+    // Update the task with the title, description, and position.
+    // Make sure to JSON.stringify the position if it's an object.
+    await knex("tasks")
+      .where({ id: taskId, user_id: userId })
+      .update({
+        title,
+        description,
+        position: JSON.stringify(position),
+      });
+
+    const updatedTask = await knex("tasks").where({ id: taskId }).first();
+    // Parse the position back into an object if it's stored as a string.
+    if (updatedTask && updatedTask.position) {
+      updatedTask.position = JSON.parse(updatedTask.position);
     }
-    const updatedTask = await knex("tasks").where({ id }).first();
-    res.status(200).json(updatedTask);
+    res.json(updatedTask);
   } catch (error) {
-    console.error("Error updating task:", error);
-    res.status(400).json({ error: "Failed to update task." });
+    console.error("Detailed error: ", error);
+    res.status(500).send(`Error updating task: ${error}`);
   }
 });
 
-// DELETE route to delete an existing task for the authenticated user
-router.delete("/:id", authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const deleted = await knex("tasks")
-      .where({ id, user_id: req.userObj.id })
-      .del();
+// Delete a task
+router.delete("/:id", authorizer, async (req, res) => {
+  const taskId = req.params.id;
+  const userId = req.userObj.id;
 
-    if (!deleted) {
-      return res
-        .status(404)
-        .json({ error: "Task not found or not accessible." });
+  try {
+    const task = await knex("tasks")
+      .where({ id: taskId, user_id: userId })
+      .first();
+    if (!task) {
+      return res.status(404).send({ error: "Task not found" });
     }
+
+    await knex("tasks").where({ id: taskId, user_id: userId }).del();
     res.status(204).send();
   } catch (error) {
-    console.error("Error deleting task:", error);
-    res.status(400).json({ error: "Failed to delete task." });
+    res.status(500).send(`Error deleting task: ${error}`);
   }
 });
 

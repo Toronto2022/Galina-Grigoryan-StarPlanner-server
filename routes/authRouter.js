@@ -58,21 +58,4 @@ router.post("/login", async (req, res) => {
   });
 });
 
-// router.get("/user-info", async (req, res) => {
-//   try {
-//     const token = req.headers.authorization.split(" ")[1]; // Assuming Bearer token is used
-//     const decoded = jwt.verify(token, process.env.SECRET_KEY);
-//     const userId = decoded.id;
-
-//     const user = await knex("users").where("id", userId).first();
-//     if (!user) {
-//       return res.status(404).send("User not found");
-//     }
-//     res.status(200).send({ name: user.name });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).send("Error retrieving user information");
-//   }
-// });
-
 module.exports = router;
