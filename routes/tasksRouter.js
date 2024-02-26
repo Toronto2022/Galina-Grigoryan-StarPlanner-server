@@ -40,6 +40,27 @@ router.post("/", authorizer, async (req, res) => {
   }
 });
 
+// post route to retrieve tasks, optionally filtered by date
+router.post("/date", authorizer, async (req, res) => {
+  try {
+    const userId = req.userObj.id;
+    const { date } = req.body;
+    const targetDate = new Date(date);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    const day = targetDate.getDate();
+    const tasksQuery = knex("tasks")
+      .where({ user_id: userId })
+      .where("created_at", ">=", new Date(year, month, day))
+      .where("created_at", "<", new Date(year, month, day + 1))
+      .select("id", "title", "description", "position", "task_date");
+    const tasks = await tasksQuery;
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).send(`Error retrieving tasks: ${error}`);
+  }
+});
+
 // Update a task
 router.put("/:id", authorizer, async (req, res) => {
   const taskId = req.params.id;
