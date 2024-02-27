@@ -21,43 +21,37 @@ router.get("/", authorizer, async (req, res) => {
   }
 });
 
-// Create a new task
-router.post("/", authorizer, async (req, res) => {
-  const userId = req.userObj.id;
-  const { title, description } = req.body;
-
-  try {
-    const [newTaskId] = await knex("tasks").insert({
-      user_id: userId,
-      title,
-      description,
-    });
-
-    const newTask = await knex("tasks").where({ id: newTaskId }).first();
-    res.status(201).json(newTask);
-  } catch (error) {
-    res.status(400).send(`Error creating task: ${error}`);
-  }
-});
-
 // post route to retrieve tasks, optionally filtered by date
 router.post("/date", authorizer, async (req, res) => {
   try {
     const userId = req.userObj.id;
     const { date } = req.body;
-    const targetDate = new Date(date);
-    const year = targetDate.getFullYear();
-    const month = targetDate.getMonth();
-    const day = targetDate.getDate();
     const tasksQuery = knex("tasks")
-      .where({ user_id: userId })
-      .where("created_at", ">=", new Date(year, month, day))
-      .where("created_at", "<", new Date(year, month, day + 1))
+      .where({ user_id: userId, task_date: date })
       .select("id", "title", "description", "position", "task_date");
     const tasks = await tasksQuery;
     res.json(tasks);
   } catch (error) {
     res.status(500).send(`Error retrieving tasks: ${error}`);
+  }
+});
+
+// Create a new task
+router.post("/", authorizer, async (req, res) => {
+  const userId = req.userObj.id;
+  const { title, description, task_date } = req.body;
+  try {
+    const [newTaskId] = await knex("tasks").insert({
+      user_id: userId,
+      title,
+      description,
+      task_date,
+      position: { x: 0, y: 0 },
+    });
+    const newTask = await knex("tasks").where({ id: newTaskId }).first();
+    res.status(201).json(newTask);
+  } catch (error) {
+    res.status(400).send(`Error creating task: ${error}`);
   }
 });
 
@@ -69,8 +63,6 @@ router.put("/:id", authorizer, async (req, res) => {
   const { title, description, position } = req.body;
 
   try {
-    // Update the task with the title, description, and position.
-    // Make sure to JSON.stringify the position if it's an object.
     await knex("tasks")
       .where({ id: taskId, user_id: userId })
       .update({
@@ -80,7 +72,6 @@ router.put("/:id", authorizer, async (req, res) => {
       });
 
     const updatedTask = await knex("tasks").where({ id: taskId }).first();
-    // Parse the position back into an object if it's stored as a string.
     if (updatedTask && updatedTask.position) {
       updatedTask.position = JSON.parse(updatedTask.position);
     }
@@ -103,7 +94,6 @@ router.delete("/:id", authorizer, async (req, res) => {
     if (!task) {
       return res.status(404).send({ error: "Task not found" });
     }
-
     await knex("tasks").where({ id: taskId, user_id: userId }).del();
     res.status(204).send();
   } catch (error) {
